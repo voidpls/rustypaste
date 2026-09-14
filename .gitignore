@@ -6,3 +6,6 @@
 
 # Default upload directory
 **/upload/
+
+# Codegraph index
+.codegraph/

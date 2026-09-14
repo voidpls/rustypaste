@@ -1,0 +1,56 @@
+import { getLogger } from "@logtape/logtape";
+import { useEffect, useMemo, useState } from "react";
+import { getList, type ListItem } from "@/api/getList.ts";
+import { useSettings } from "@/components/useSettings.ts";
+import { delay } from "@/delay.ts";
+import useNetworkInformation from "@/hooks/use-network-information.ts";
+
+const logger = getLogger(["rustypaste-ui", "useList"]);
+
+const POLL_INTERVAL_MS = 1_000;
+
+export function useList() {
+  const { isOnline, isSupported } = useNetworkInformation();
+  const [list, setList] = useState<ListItem[]>();
+  const [isFetching, setIsFetching] = useState(true);
+
+  const { settings } = useSettings();
+
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    void (async () => {
+      while (!abortController.signal.aborted) {
+        try {
+          setIsFetching(true);
+          const list = await getList({
+            instanceUrl: settings.instanceUrl,
+            signal: abortController.signal,
+          });
+          setList(list);
+        } catch (error) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+          logger.error("Failed to fetch list", { error });
+        } finally {
+          setIsFetching(false);
+        }
+        await delay(POLL_INTERVAL_MS, abortController.signal);
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [settings.instanceUrl, isOnline, isSupported]);
+
+  return useMemo(
+    () => ({
+      list: list ?? [],
+      isFetching,
+      isLoading: list == null,
+    }),
+    [isFetching, list],
+  );
+}
